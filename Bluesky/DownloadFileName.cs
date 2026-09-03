@@ -28,6 +28,6 @@ internal static class DownloadFileName
         }
 
         string indexSuffix = mediaCount > 1 ? $"-{mediaIndex + 1}" : "";
-        return $"{string.Join(".", parts)}-{recordKey}{indexSuffix}.{extension}";
+        return $"{string.Join("-", parts)}-{recordKey}{indexSuffix}.{extension}";
     }
 }
