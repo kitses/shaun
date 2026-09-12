@@ -5,7 +5,7 @@ namespace Shaun.Bluesky;
 
 internal static partial class BlueskyPostUrl
 {
-    [GeneratedRegex(@"https?://[^/]+/profile/([^/]+)/post/([^/?#]+)")]
+    [GeneratedRegex(@"https?://[^/]+/(?:profile/)?([^/]+)/(?:post/)?([^/?#]+)")]
     private static partial Regex UrlRegex();
 
     public static bool TryParse(string url, [NotNullWhen(true)] out ParsedPostUrl? parsedUrl)
