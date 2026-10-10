@@ -31,6 +31,7 @@ internal static class Backends
 
         List<string> errors = [];
         List<DownloadTask> tasks = [];
+        List<Task<DownloadTask[]>> quoteCollections = [];
         Twitter.DownloadPlanner? twitter = null;
         Bluesky.DownloadPlanner? bluesky = null;
         Dictionary<string, AuthorInfo>? blueskyAuthors = null;
@@ -70,7 +71,7 @@ internal static class Backends
                 api,
                 creds,
                 guestToken,
-                twitterAdditional ?? new AdditionalAuthorBlocks<User>([], false)
+                twitterAdditional ?? AdditionalAuthorBlocks<User>.None
             );
         }
 
@@ -104,8 +105,8 @@ internal static class Backends
         WarnExtraAuthorBlocks(twitterAdditional, mediaOffset, progress);
         WarnExtraAuthorBlocks(blueskyAdditional, mediaOffset, progress);
 
-        DownloadTask[] unique = [.. tasks.DistinctBy(t => t.FileName)];
-        if (unique.Length == 0)
+        DownloadTask[] primaryUnique = [.. tasks.DistinctBy(t => t.FileName)];
+        if (primaryUnique.Length == 0 && quoteCollections.Count == 0)
             return new RunResult(0, errors.Count, errors);
 
         // eeeyuph.
@@ -114,15 +115,52 @@ internal static class Backends
             options.OutputDirectory,
             preserveOrder: !options.Mtime
         );
-        DownloadResult result = options.Parallel
-            ? await downloader.DownloadParallelAsync(unique, progress, ct)
-            : await downloader.DownloadSerialAsync(unique, progress, ct);
 
-        if (options.Mtime)
-            ApplyPostedMtimes(unique, options.OutputDirectory, progress);
+        int attempted = 0;
+        int failed = 0;
 
-        int downloaded = unique.Length - result.FailedCount;
-        errors.AddRange(result.Errors.Select(e => $"{e.FileName}: {e.Message}"));
+        async Task<int> DownloadBatchAsync(IReadOnlyList<DownloadTask> batch)
+        {
+            if (batch.Count == 0)
+                return 0;
+
+            DownloadResult result = options.Parallel
+                ? await downloader.DownloadParallelAsync(batch, progress, ct)
+                : await downloader.DownloadSerialAsync(batch, progress, ct);
+
+            errors.AddRange(result.Errors.Select(e => $"{e.FileName}: {e.Message}"));
+            attempted += batch.Count;
+            if (options.Mtime)
+                ApplyPostedMtimes(batch, options.OutputDirectory, progress);
+            return result.FailedCount;
+        }
+
+        var plannedNames = new HashSet<string>(
+            primaryUnique.Select(t => t.FileName),
+            StringComparer.Ordinal
+        );
+
+        failed += await DownloadBatchAsync(primaryUnique);
+
+        // quote walkers fetch quoted posts while the primary media downloads run
+        foreach (Task<DownloadTask[]> collection in quoteCollections)
+        {
+            DownloadTask[] quoteTasks;
+            try
+            {
+                quoteTasks = await collection;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                errors.Add($"quote posts: {e.Message}");
+                continue;
+            }
+
+            DownloadTask[] quoteUnique = [.. quoteTasks.Where(t => plannedNames.Add(t.FileName))];
+            failed += await DownloadBatchAsync(quoteUnique);
+        }
+
+        int downloaded = attempted - failed;
         return new RunResult(downloaded, errors.Count, errors);
 
         async Task<DownloadTask[]> CollectTasksAsync(RoutedUrl routedUrl) =>
@@ -135,11 +173,17 @@ internal static class Backends
 
         async Task<DownloadTask[]> CollectTwitterTasksAsync(RoutedUrl.Twitter tw)
         {
-            var (postTasks, mediaCount) = await twitter!.CollectDownloadTasksAsync(
+            var (postTasks, mediaCount, tweet) = await twitter!.CollectDownloadTasksAsync(
                 tw.Parsed,
                 mediaOffset,
                 ct
             );
+            if (options.Quotes)
+            {
+                quoteCollections.Add(
+                    twitter.CollectQuoteTasksAsync(tw.Parsed.StatusId, tweet, progress, ct)
+                );
+            }
             mediaOffset += mediaCount;
             return postTasks;
         }
@@ -149,12 +193,24 @@ internal static class Backends
             if (!blueskyAuthors!.TryGetValue(bs.Parsed.HandleOrDid, out AuthorInfo? author))
                 return [];
 
-            var (postTasks, mediaCount) = await bluesky!.CollectDownloadTasksAsync(
+            var (postTasks, mediaCount, postRecord) = await bluesky!.CollectDownloadTasksAsync(
                 bs.Parsed,
                 author,
                 mediaOffset,
                 ct
             );
+            if (options.Quotes)
+            {
+                quoteCollections.Add(
+                    bluesky.CollectQuoteTasksAsync(
+                        bs.Parsed.RecordKey,
+                        author,
+                        postRecord,
+                        progress,
+                        ct
+                    )
+                );
+            }
             mediaOffset += mediaCount;
             return postTasks;
         }
@@ -187,7 +243,7 @@ internal static class Backends
     {
         if (string.IsNullOrWhiteSpace(also))
         {
-            return new AdditionalAuthorBlocks<T>([], false);
+            return AdditionalAuthorBlocks<T>.None;
         }
 
         bool perMedia = also.Contains('!');

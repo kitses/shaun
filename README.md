@@ -16,6 +16,7 @@ Options:
   -c, --compact          Omit DIDs from Bluesky filenames
   -p, --parallel         Download media in parallel
   -m, --mtime            Set each file's modification time to the post's reported publishing time
+  -q, --quotes           Follow quote posts recursively and download their media too
   -o, --output <output>  Output directory (defaults to the current directory)
 ```
 

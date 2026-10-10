@@ -48,8 +48,15 @@ internal record PostEmbed(
     List<ImageEntry>? Images = null,
     BlobInfo? Video = null,
     [property: JsonPropertyName("items")] List<ImageEntry>? GalleryItems = null,
-    PostEmbed? Media = null
+    PostEmbed? Media = null,
+    RecordRef? Record = null
 );
+
+// plain quote embeds carry the strongRef directly; recordWithMedia wraps it in an app.bsky.embed.record view
+internal record RecordRef(string? Uri = null, RecordRef? Record = null)
+{
+    public string? StrongRefUri => Uri ?? Record?.Uri;
+}
 
 internal record ImageEntry(BlobInfo Image);
 

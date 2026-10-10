@@ -25,7 +25,14 @@ internal record UserLookupContainer(UserLookupResult? Result);
 
 internal record UserLookupResult(User? Core);
 
-internal record TweetData(TweetLegacy? Legacy, TweetCore? Core, TweetData? Tweet)
+internal record TweetData(
+    TweetLegacy? Legacy,
+    TweetCore? Core,
+    TweetData? Tweet,
+    [property: JsonPropertyName("rest_id")] string? RestId = null,
+    [property: JsonPropertyName("quoted_status_result")]
+        TweetResultContainer? QuotedStatusResult = null
+)
 {
     // TweetWithVisibilityResults replies hide the actual tweet one level deeper in the tweet field, every other form
     // arrives flat like my ass

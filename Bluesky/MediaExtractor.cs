@@ -7,6 +7,9 @@ internal static class MediaExtractor
         return record.Value.Embed is { } embed ? ExtractFromEmbed(embed) : [];
     }
 
+    public static string? GetQuoteUri(PostRecord record) =>
+        record.Value.Embed?.Record?.StrongRefUri;
+
     private static IReadOnlyList<MediaItem> ExtractFromEmbed(PostEmbed embed)
     {
         return embed.Type switch

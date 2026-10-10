@@ -30,6 +30,10 @@ internal sealed class Program
             Description =
                 "Set each file's modification time to the post's reported publishing time",
         };
+        Option<bool> quotesOpt = new("--quotes", ["-q"])
+        {
+            Description = "Follow quote posts recursively and download their media",
+        };
         Option<string?> outputOpt = new("--output", ["-o"])
         {
             Description = "Output directory (defaults to the current directory)",
@@ -38,7 +42,7 @@ internal sealed class Program
         RootCommand root = new("Downloads media from Bluesky and Twitter/X posts.")
         {
             Arguments = { urlsArg },
-            Options = { alsoOpt, compactOpt, parallelOpt, mtimeOpt, outputOpt },
+            Options = { alsoOpt, compactOpt, parallelOpt, mtimeOpt, quotesOpt, outputOpt },
         };
 
         root.SetAction(
@@ -50,6 +54,7 @@ internal sealed class Program
                     result.GetValue(compactOpt),
                     result.GetValue(parallelOpt),
                     result.GetValue(mtimeOpt),
+                    result.GetValue(quotesOpt),
                     result.GetValue(outputOpt) ?? Environment.CurrentDirectory
                 );
                 return await RunAsync(options, ct);
